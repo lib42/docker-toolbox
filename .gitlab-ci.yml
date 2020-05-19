@@ -1,0 +1,39 @@
+variables:
+  IMAGE_NAME: toolbox
+  RELEASE_TAG: v1
+  
+  # We could also use the Git-Hash here using $CI_COMMIT_SHORT_SHA
+  BUILD_TAG: latest
+
+stages:
+  - build
+  - test
+  - release
+
+# Bootstrap Buildah Image & build/push image
+build:
+  image: lib42/toolbox
+  stage: build
+  script:
+    - buildah bud --pull -t "${REGISTRY}/${IMAGE_NAME}:${BUILD_TAG}" .
+    - buildah push  --creds "${REGISTRY_USER}:${REGISTRY_PASS}" "${REGISTRY}/${IMAGE_NAME}:${BUILD_TAG}"
+
+# Use build image for poor man's testing
+test:
+  image: "${REGISTRY}/${IMAGE_NAME}:${BUILD_TAG}"
+  stage: test
+  script:
+    - buildah --help
+    - podman --help
+    - helm --help
+    - helm2 --help
+    - skopeo --help
+
+# Retag image for final release on master-branch only
+release:
+  image: lib42/toolbox:v1
+  stage: release
+  script:
+    - skopeo copy --screds "${REGISTRY_USER}:${REGISTRY_PASS}" --dcreds "${REGISTRY_USER}:${REGISTRY_PASS}" "docker://${REGISTRY}/${IMAGE_NAME}:${BUILD_TAG}" "docker://${REGISTRY}/${IMAGE_NAME}:${RELEASE_TAG}"
+  only:
+    - master
